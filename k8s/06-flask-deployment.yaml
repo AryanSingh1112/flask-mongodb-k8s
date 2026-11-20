@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  namespace: flask-app
+  labels:
+    app: flask-app
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0     # zero-downtime rollouts
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: flask-app
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      affinity:
+        podAntiAffinity:                 # prefer spreading replicas across nodes
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app: flask-app }
+      containers:
+        - name: flask-app
+          image: flask-mongo-app:1.0.0   # built locally and loaded into Minikube
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          envFrom:
+            - configMapRef: { name: flask-config }
+          env:
+            - name: MONGO_USERNAME
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_APP_USERNAME } }
+            - name: MONGO_PASSWORD
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_APP_PASSWORD } }
+          resources:
+            requests: { cpu: 200m, memory: 250M }
+            limits:   { cpu: 500m, memory: 500M }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp                  # gunicorn needs a writable /tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,33 @@
+# Static PV (hostPath) + PVC. On Minikube the node's /data directory survives
+# `minikube stop/start`. On a real cluster replace hostPath with a CSI-backed
+# volume (EBS/PD/Azure Disk/Ceph) or simply use a StorageClass + dynamic provisioning.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+  labels:
+    app: mongodb
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain   # deleting the PVC must never delete DB files
+  storageClassName: manual
+  hostPath:
+    path: /data/flask-mongodb
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: flask-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  volumeName: mongodb-pv        # pin the claim to this exact PV (deterministic binding)
+  resources:
+    requests:
+      storage: 1Gi

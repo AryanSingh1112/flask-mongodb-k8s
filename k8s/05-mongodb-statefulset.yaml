@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: flask-app
+  labels:
+    app: mongodb
+spec:
+  serviceName: mongodb-headless
+  replicas: 1            # standalone instance; HA would need a replica set (see docs/DESIGN.md)
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mongodb
+          image: mongo:7.0          # pinned major: never `latest` for a database
+          # Cap WiredTiger cache so mongod stays well inside the 500M container limit
+          # (its default is max(256MB, 50% of RAM-1GB) and is not guaranteed to respect cgroup limits).
+          # NOTE: the image entrypoint adds --auth automatically because
+          # MONGO_INITDB_ROOT_USERNAME/PASSWORD are set.
+          args: ["--wiredTigerCacheSizeGB", "0.25"]
+          ports:
+            - name: mongo
+              containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_INITDB_ROOT_USERNAME } }
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_INITDB_ROOT_PASSWORD } }
+            - name: MONGO_APP_USERNAME
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_APP_USERNAME } }
+            - name: MONGO_APP_PASSWORD
+              valueFrom: { secretKeyRef: { name: mongodb-credentials, key: MONGO_APP_PASSWORD } }
+            - name: MONGO_APP_DB
+              valueFrom: { configMapKeyRef: { name: flask-config, key: MONGO_DB } }
+          resources:
+            requests: { cpu: 200m, memory: 250M }
+            limits:   { cpu: 500m, memory: 500M }
+            startupProbe:
+            tcpSocket:
+              port: 27017
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mongodb-pvc
+        - name: init
+          configMap:
+            name: mongodb-init

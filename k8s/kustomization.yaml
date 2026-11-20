@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 00-namespace.yaml
+  - 01-secret.yaml
+  - 02-configmaps.yaml
+  - 03-mongodb-storage.yaml
+  - 04-mongodb-services.yaml
+  - 05-mongodb-statefulset.yaml
+  - 06-flask-deployment.yaml
+  - 07-flask-service.yaml
+  - 08-flask-hpa.yaml
+  - 09-flask-pdb.yaml
+  - 10-networkpolicy.yaml

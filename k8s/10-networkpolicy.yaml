@@ -1,0 +1,21 @@
+# Defence in depth: only Flask pods may open connections to MongoDB.
+# NOTE: enforced only if the CNI supports NetworkPolicy. Minikube's default CNI does not;
+# start with `minikube start --cni=calico` to see it enforced. Harmless otherwise.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mongodb-allow-flask-only
+  namespace: flask-app
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: flask-app
+      ports:
+        - protocol: TCP
+          port: 27017
